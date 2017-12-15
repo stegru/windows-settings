@@ -13,6 +13,8 @@ namespace WindowsSettings
     {
         static void Main(string[] args)
         {
+            string inputFile = null;
+
             if (args != null && args.Length > 0)
             {
                 switch (args[0])
@@ -58,13 +60,32 @@ namespace WindowsSettings
 
                         break;
 
+                    case "-file":
+                        inputFile = string.Join(" ", args.Skip(1));
+                        break;
+
                     default:
+                        Console.Error.WriteLine("Unknown option '{0}'", args);
                         break;
                 }
-                return;
+
+                if (inputFile == null)
+                {
+                    return;
+                }
             }
 
-            using (Stream input = Console.OpenStandardInput())
+            Stream input;
+            if (inputFile == null)
+            {
+                input = Console.OpenStandardInput();
+            }
+            else
+            {
+                input = File.OpenRead(inputFile);
+            }
+
+            using (input)
             {
                 IEnumerable<Payload> payloads = null;
 
