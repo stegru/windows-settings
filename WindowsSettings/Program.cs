@@ -1,6 +1,7 @@
 ﻿using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -50,7 +51,8 @@ namespace WindowsSettings
                         {
                             if (method.IsExposed())
                             {
-                                IEnumerable<string> paras = method.GetParameters().Select(p => {
+                                IEnumerable<string> paras = method.GetParameters().Select(p =>
+                                {
                                     return string.Format(CultureInfo.InvariantCulture, "{1}: {0}",
                                         p.ParameterType.Name, p.Name);
                                 });
@@ -85,10 +87,10 @@ namespace WindowsSettings
                 input = File.OpenRead(inputFile);
             }
 
+            IEnumerable<Payload> payloads = null;
+
             using (input)
             {
-                IEnumerable<Payload> payloads = null;
-
                 try
                 {
                     payloads = Payload.FromStream(input);
@@ -100,14 +102,41 @@ namespace WindowsSettings
                     Environment.ExitCode = 1;
                     return;
                 }
+            }
 
-                foreach (Payload payload in payloads)
+            bool first = true;
+            Console.Write("[");
+            foreach (Payload payload in payloads)
+            {
+                if (!first)
                 {
-                    Result result = SettingHandler.Apply(payload);
-                    Console.Write(result.ToString());
                     Console.WriteLine(",");
                 }
+
+                first = false;
+
+                Result result = SettingHandler.Apply(payload);
+                Console.Write(result.ToString());
             }
+            Console.Write("]");
+
+            // Wait for them all to complete.
+            const long timeout = 5000;
+            Stopwatch timer = new Stopwatch();
+            timer.Start();
+            foreach (Payload payload in payloads)
+            {
+                int t = (int)(timeout - timer.ElapsedMilliseconds);
+                if (t <= 0)
+                {
+                    break;
+                }
+                payload.SettingItem.WaitForCompletion(t);
+            }
+
         }
+
+
     }
+
 }

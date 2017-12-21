@@ -7,6 +7,7 @@
     using System.Reflection;
     using System.Runtime.Serialization;
     using System.Runtime.Serialization.Json;
+    using System.Threading.Tasks;
 
     public class SettingHandler
     {
@@ -19,7 +20,7 @@
         /// <returns>The result.</returns>
         public static Result Apply(Payload payload)
         {
-            Result result = new Result();
+            Result result = new Result(payload);
 
             SettingItem settingItem;
 
@@ -31,6 +32,8 @@
                     settingItem = new SettingItem(payload.SettingId);
                     settingCache[payload.SettingId] = settingItem;
                 }
+
+                payload.SettingItem = settingItem;
 
                 // Get the parameter types to get the right overload.
                 Type[] paramTypes = Type.EmptyTypes;
@@ -63,6 +66,10 @@
                 try
                 {
                     result.ReturnValue = method.Invoke(settingItem, payload.Parameters);
+                    if (!(payload.Async ?? true))
+                    {
+                        settingItem.WaitForCompletion(5);
+                    }
                 }
                 // Catching general exceptions is ok with .NET 4 because corrupted state exceptions aren't caught.
                 catch (Exception e)
@@ -86,15 +93,22 @@
     {
         /// <summary>The Setting ID</summary>
         [DataMember(Name = "settingID")]
-        public string SettingId { get; private set; }
+        public string SettingId { get; set; }
 
         /// <summary>The method of <c>SettingItem</c> to call.</summary>
         [DataMember(Name = "method")]
-        public string Method { get; private set; }
+        public string Method { get; set; }
 
         /// <summary>The parameters to pass to the method.</summary>
         [DataMember(Name = "parameters")]
         public object[] Parameters { get; private set; }
+
+        /// <summary>False to wait for this setting to complete.</summary>
+        [DataMember(Name = "async")]
+        public bool? Async { get; private set; }
+
+        /// <summary>The setting item (set after it has been applied).</summary>
+        internal SettingItem SettingItem { get; set; }
 
         /// <summary>Instantiates some payloads from the given stream of JSON.</summary>
         /// <param name="input">The input data.</param>
@@ -111,6 +125,10 @@
     [DataContract]
     public class Result
     {
+        /// <summary>The setting ID.</summary>
+        [DataMember(Name = "settingID", EmitDefaultValue = false)]
+        public string SettingId { get; set; }
+
         /// <summary>true if there was an error.</summary>
         [DataMember(Name = "isError", EmitDefaultValue = false)]
         public bool IsError { get; set; }
@@ -120,8 +138,13 @@
         public string ErrorMessage { get; set; }
 
         /// <summary>The return value.</summary>
-        [DataMember(Name = "returnValue", EmitDefaultValue = false)]
+        [DataMember(Name = "returnValue", EmitDefaultValue = true)]
         public object ReturnValue { get; set; }
+
+        public Result(Payload payload)
+        {
+            this.SettingId = payload.SettingId;
+        }
 
         public override string ToString()
         {

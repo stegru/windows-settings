@@ -8,6 +8,7 @@ namespace WindowsSettings
     using System.Linq;
     using System.Reflection;
     using System.Runtime.InteropServices;
+    using System.Runtime.InteropServices.WindowsRuntime;
 
     /// <summary>
     /// Handles a setting (a wrapper for ISettingItem).
@@ -76,21 +77,29 @@ namespace WindowsSettings
             return this.settingItem.GetValue(valueName);
         }
 
-        /// <summary>Gets the setting's value.</summary>
+        /// <summary>Sets the setting's value.</summary>
         /// <param name="newValue">The new value.</param>
+        /// <returns>The previous value.</returns>
         [Expose]
-        public void SetValue(object newValue)
+        public object SetValue(object newValue)
         {
-            this.SetValue("Value", newValue);
+            return this.SetValue("Value", newValue);
         }
 
-        /// <summary>Gets the setting's value.</summary>
+        /// <summary>Sets the setting's value.</summary>
         /// <param name="newValue">The new value.</param>
         /// <param name="valueName">Value name (normally "Value")</param>
+        /// <returns>The previous value.</returns>
         [Expose]
-        public void SetValue(string valueName, object newValue)
+        public object SetValue(string valueName, object newValue)
         {
-            this.settingItem.SetValue(valueName, newValue);
+            object old = this.GetValue(valueName);
+            if (newValue != old)
+            {
+                this.settingItem.SetValue(valueName, newValue);
+            }
+
+            return old;
         }
 
         [Expose]
@@ -104,9 +113,37 @@ namespace WindowsSettings
 
         /// <summary>Invokes an Action setting.</summary>
         [Expose]
-        public void Invoke()
+        public long Invoke()
         {
-            this.settingItem.Invoke(IntPtr.Zero, new Rect());
+            return this.Invoke(IntPtr.Zero);
+        }
+
+        /// <summary>Invokes an Action setting.</summary>
+        [Expose]
+        public long Invoke(long n)
+        {
+            return this.Invoke(new IntPtr(n));
+        }
+
+        /// <summary>Invokes an Action setting.</summary>
+        [Expose]
+        public long Invoke(string s)
+        {
+            IntPtr hstring = WindowsRuntimeMarshal.StringToHString(s);
+            try
+            {
+                return this.Invoke(hstring);
+            }
+            finally
+            {
+                WindowsRuntimeMarshal.FreeHString(hstring);
+            }
+        }
+
+        /// <summary>Invokes an Action setting.</summary>
+        public long Invoke(IntPtr n)
+        {
+            return this.settingItem.Invoke(n, new Rect()).ToInt64();
         }
 
         /// <summary>Gets the "IsEnabled" value.</summary>
@@ -121,6 +158,26 @@ namespace WindowsSettings
         public bool IsApplicable()
         {
             return this.settingItem.IsApplicable;
+        }
+
+        /// <summary>Waits for the setting to finish updating (IsUpdating is false)</summary>
+        /// <param name="timeout">Timeout in seconds.</param>
+        /// <returns>IsUpdating value - so true means it timed-out</returns>
+        public bool WaitForCompletion(int timeout)
+        {
+            const int interval = 100;
+            timeout *= (1000 / interval);
+            while (this.settingItem.IsUpdating)
+            {
+                if (--timeout < 0)
+                {
+                    break;
+                }
+
+                System.Threading.Thread.Sleep(interval);
+            }
+
+            return this.settingItem.IsUpdating;
         }
 
         /// <summary>Gets the DLL file that contains the class for the setting.</summary>
@@ -194,7 +251,7 @@ namespace WindowsSettings
             int lastError = Marshal.GetLastWin32Error();
             return (lastError == 0)
                 ? message
-                : String.Format("{0} (win32 error {1})", message, lastError);            
+                : String.Format("{0} (win32 error {1})", message, lastError);
         }
     }
 
@@ -219,3 +276,5 @@ namespace WindowsSettings
         }
     }
 }
+
+
